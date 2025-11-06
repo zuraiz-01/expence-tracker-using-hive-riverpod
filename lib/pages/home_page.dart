@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_filex/open_filex.dart';
 import '../models/expense.dart';
 import '../providers/expense_provider.dart';
+import '../providers/balance_provider.dart';
+import '../services/pdf_service.dart';
+
+final balanceProvider = StateProvider<double>((ref) => 0.0);
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -10,6 +15,7 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final expenses = ref.watch(expenseProvider);
     final notifier = ref.read(expenseProvider.notifier);
+    final balance = ref.watch(balanceProvider);
 
     // Calculate total expense for the current week
     final now = DateTime.now();
@@ -18,19 +24,97 @@ class HomePage extends ConsumerWidget {
         .where((e) => e.date.isAfter(startOfWeek))
         .fold<double>(0, (sum, e) => sum + e.amount);
 
+    final remainingBalance = balance - totalThisWeek;
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: const Text('Expense Tracker'),
         centerTitle: true,
         backgroundColor: Colors.teal,
+        actions: [
+          // 🧾 Export PDF
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: () async {
+              try {
+                final file = await PdfService.generateExpenseReport(
+                  expenses,
+                  totalThisWeek,
+                  ref.watch(balanceProvider),
+                );
+                await OpenFilex.open(file.path);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error opening PDF: $e')),
+                );
+              }
+            },
+          ),
+          // 💰 Update balance button
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet),
+            onPressed: () => _updateBalanceDialog(context, ref, balance),
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // Weekly total card
+          // 💰 Balance Card
+          Card(
+            color: Colors.teal[700],
+            margin: const EdgeInsets.all(12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total Balance',
+                        style: TextStyle(color: Colors.white, fontSize: 18),
+                      ),
+                      Text(
+                        'Rs. ${balance.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Remaining Balance',
+                        style: TextStyle(color: Colors.white70, fontSize: 16),
+                      ),
+                      Text(
+                        'Rs. ${remainingBalance.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 📅 Weekly total card
           Card(
             color: Colors.teal,
-            margin: const EdgeInsets.all(12),
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -56,7 +140,7 @@ class HomePage extends ConsumerWidget {
             ),
           ),
 
-          // Expenses list
+          // 💸 Expense List
           Expanded(
             child: expenses.isEmpty
                 ? const Center(
@@ -66,15 +150,18 @@ class HomePage extends ConsumerWidget {
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(8),
                     itemCount: expenses.length,
                     itemBuilder: (context, index) {
                       final expense = expenses[index];
                       return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        elevation: 3,
+                        elevation: 2,
                         child: ListTile(
                           title: Text(
                             expense.title,
@@ -90,18 +177,13 @@ class HomePage extends ConsumerWidget {
                           trailing: Text(
                             'Rs. ${expense.amount.toStringAsFixed(2)}',
                             style: const TextStyle(
-                              fontWeight: FontWeight.bold,
                               color: Colors.teal,
-                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          onTap: () => _editExpenseDialog(
-                            context,
-                            ref,
-                            expense,
-                            index,
-                          ), // Edit on tap
                           onLongPress: () => notifier.deleteExpense(index),
+                          onTap: () =>
+                              _editExpenseDialog(context, ref, expense, index),
                         ),
                       );
                     },
@@ -109,7 +191,6 @@ class HomePage extends ConsumerWidget {
           ),
         ],
       ),
-
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.teal,
         onPressed: () => _addExpenseDialog(context, ref),
@@ -118,7 +199,37 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  // --- Add Expense Dialog ---
+  // 💰 Update Balance Dialog
+  Future<void> _updateBalanceDialog(
+    BuildContext context,
+    WidgetRef ref,
+    double balance,
+  ) async {
+    final controller = TextEditingController(text: balance.toString());
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update Balance'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Enter total balance'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              final newBalance = double.tryParse(controller.text) ?? 0;
+              ref.read(balanceProvider.notifier).state = newBalance;
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ➕ Add Expense Dialog
   Future<void> _addExpenseDialog(BuildContext context, WidgetRef ref) async {
     final titleController = TextEditingController();
     final amountController = TextEditingController();
@@ -145,7 +256,7 @@ class HomePage extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () {
-              final title = titleController.text;
+              final title = titleController.text.trim();
               final amount = double.tryParse(amountController.text) ?? 0;
               if (title.isNotEmpty && amount > 0) {
                 ref
@@ -167,7 +278,7 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  // --- Edit Expense Dialog ---
+  // ✏️ Edit Expense Dialog
   Future<void> _editExpenseDialog(
     BuildContext context,
     WidgetRef ref,
@@ -201,7 +312,7 @@ class HomePage extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () {
-              final title = titleController.text;
+              final title = titleController.text.trim();
               final amount = double.tryParse(amountController.text) ?? 0;
               if (title.isNotEmpty && amount > 0) {
                 ref
