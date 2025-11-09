@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
+// import '../services/fcm_service.dart';
 import '../models/expense.dart';
 import '../providers/expense_provider.dart';
 import '../providers/balance_provider.dart';
 import '../services/pdf_service.dart';
+import '../services/send_notification_service.dart';
 
 final balanceProvider = StateProvider<double>((ref) => 0.0);
 
@@ -44,6 +46,14 @@ class HomePage extends ConsumerWidget {
                   ref.watch(balanceProvider),
                 );
                 await OpenFilex.open(file.path);
+                // Send a notification (via FCM) to this device informing PDF is ready.
+                try {
+                  await SendNotificationService()
+                      .sendPdfNotificationToThisDevice(file.path);
+                } catch (e) {
+                  // ignore: avoid_print
+                  print('Failed to send PDF notification: $e');
+                }
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Error opening PDF: $e')),
@@ -217,10 +227,21 @@ class HomePage extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               final newBalance = double.tryParse(controller.text) ?? 0;
               ref.read(balanceProvider.notifier).state = newBalance;
               Navigator.pop(context);
+              // send notification about balance update
+              try {
+                await SendNotificationService().sendSimpleNotificationToThisDevice(
+                  title: 'Balance Updated',
+                  body:
+                      'Total balance updated to Rs. ${newBalance.toStringAsFixed(2)}',
+                );
+              } catch (e) {
+                // ignore: avoid_print
+                print('Failed to send balance update notification: $e');
+              }
             },
             child: const Text('Save'),
           ),
@@ -255,7 +276,7 @@ class HomePage extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               final title = titleController.text.trim();
               final amount = double.tryParse(amountController.text) ?? 0;
               if (title.isNotEmpty && amount > 0) {
@@ -268,6 +289,17 @@ class HomePage extends ConsumerWidget {
                         date: DateTime.now(),
                       ),
                     );
+                // notify about new expense
+                try {
+                  await SendNotificationService()
+                      .sendSimpleNotificationToThisDevice(
+                        title: 'Expense Added',
+                        body: '$title — Rs. ${amount.toStringAsFixed(2)}',
+                      );
+                } catch (e) {
+                  // ignore: avoid_print
+                  print('Failed to send expense add notification: $e');
+                }
               }
               Navigator.pop(context);
             },
@@ -311,7 +343,7 @@ class HomePage extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               final title = titleController.text.trim();
               final amount = double.tryParse(amountController.text) ?? 0;
               if (title.isNotEmpty && amount > 0) {
@@ -325,6 +357,17 @@ class HomePage extends ConsumerWidget {
                         date: DateTime.now(),
                       ),
                     );
+                // notify about expense update
+                try {
+                  await SendNotificationService()
+                      .sendSimpleNotificationToThisDevice(
+                        title: 'Expense Updated',
+                        body: '$title — Rs. ${amount.toStringAsFixed(2)}',
+                      );
+                } catch (e) {
+                  // ignore: avoid_print
+                  print('Failed to send expense update notification: $e');
+                }
               }
               Navigator.pop(context);
             },

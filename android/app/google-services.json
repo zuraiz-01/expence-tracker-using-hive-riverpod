@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "753824108779",
+    "project_id": "expencetracker-9f731",
+    "storage_bucket": "expencetracker-9f731.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:753824108779:android:a6cc4787950261536b6eae",
+        "android_client_info": {
+          "package_name": "com.example.expence_track_hive"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC57nGVIBWxB4X22ehNB5AOgOofDV2PqcE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
